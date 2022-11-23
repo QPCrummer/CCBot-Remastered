@@ -1,0 +1,27 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
+}
+
+group 'net.ddns.crummercraft'
+version '3.0.0'
+
+sourceCompatibility = targetCompatibility = JavaVersion.VERSION_17
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'net.dv8tion:JDA:5.0.0-alpha.22'
+    implementation 'com.google.code.gson:gson:2.10'
+}
+
+shadowJar {
+    manifest {
+        attributes(
+                'Main-Class': 'net.ddns.crummercraft.Main'
+        )
+    }
+    minimize()
+}
