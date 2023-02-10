@@ -1,7 +1,8 @@
 package net.ddns.crummercraft;
 
 import net.ddns.crummercraft.config.Config;
-import net.ddns.crummercraft.servers.ServerJson;
+import net.ddns.crummercraft.servers.Server;
+import net.ddns.crummercraft.servers.ServerConfigReader;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.entities.Member;
@@ -9,52 +10,67 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.FileUpload;
-import org.jetbrains.annotations.NotNull;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static net.ddns.crummercraft.config.Config.*;
-import static net.ddns.crummercraft.servers.CreateServerFile.createPath;
-import static net.ddns.crummercraft.servers.Hashmap2ArrayList.*;
-import static net.ddns.crummercraft.servers.Json2Server.jsonRun;
-import static net.ddns.crummercraft.servers.Json2Server.serverJsonArray;
-import static net.ddns.crummercraft.utils.ChatUtils.findUUID;
+import static java.util.Comparator.comparingInt;
+import static java.util.stream.Collectors.joining;
+import static net.ddns.crummercraft.config.Config.admin_role;
+import static net.ddns.crummercraft.config.Config.owner_role;
+import static net.ddns.crummercraft.config.Config.private_channel;
+import static net.ddns.crummercraft.config.Config.token;
+import static net.ddns.crummercraft.config.Config.website;
+import static net.ddns.crummercraft.ChatUtils.findUUID;
 
 public class Main extends ListenerAdapter {
-
-    private final Server crummerCraft;
     private final List<Server> servers;
     private final File ipList;
-    public String list_ips;
-    public String list_servers;
-    // List of servers
+    public String serverList;
+
+    private Server mainServer = null;
+    private Server proxyServer = null;
 
     public Main() {
-        this.crummerCraft = mainServer;
-        if (this.crummerCraft == null) {
-            System.out.println("Please set a main server in server.json!");
-            System.exit(0);
-        }
+        this.servers = ServerConfigReader.listServers(e -> {
+            if (proxyServer.isRunning()) {
+                e.getJDA().getPresence().setStatus(OnlineStatus.ONLINE);
+            } else {
+                e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE);
+            }
+        }, e -> {
+            if (proxyServer.isRunning()) {
+                e.getJDA().getPresence().setStatus(OnlineStatus.IDLE);
+            } else {
+                e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE);
+            }
+        }, e -> {
+            if (mainServer.isRunning()) {
+                e.getJDA().getPresence().setStatus(OnlineStatus.ONLINE);
+            } else {
+                e.getJDA().getPresence().setStatus(OnlineStatus.IDLE);
+            }
+        }, e -> e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE));
 
-        this.servers = serverArrayList;
-        this.ipList = new File(new File(crummerCraft.startFile.getParentFile(), "config"), "offline-ip-list.txt");
-        //TODO Potential issue
-        this.list_ips = servers.stream().sorted(Comparator.comparingInt(Server::port)).map(Server::toString).collect(Collectors.joining("\n"));
-        this.list_servers = serverJsonArray.stream().map(ServerJson::toStringWithoutPath).collect(Collectors.joining("\n"));
+        mainServer = servers.stream().filter(server -> server.info.isMainServer()).findFirst().orElseThrow(() -> new RuntimeException("No main server found"));
+        proxyServer = servers.stream().filter(server -> server.info.isProxy()).findFirst().orElseThrow(() -> new RuntimeException("No proxy server found"));
+
+        this.ipList = new File(new File(mainServer.info.serverFolder(), "config"), "offline-ip-list.txt");
+
+        this.serverList = servers.stream().sorted(comparingInt(Server::port)).map(Server::toString).collect(joining("\n"));
     }
 
     public static void main(String[] args) {
         new Config();
-        createPath();
-        jsonRun();
-        fillArrayList();
-        findMainServer();
-        findProxy();
         JDABuilder.createDefault(token)
                 .setStatus(OnlineStatus.OFFLINE)
                 .addEventListeners(new Main())
@@ -71,7 +87,7 @@ public class Main extends ListenerAdapter {
     }
 
     @Override
-    public synchronized void onMessageReceived(@NotNull MessageReceivedEvent e) {
+    public synchronized void onMessageReceived(MessageReceivedEvent e) {
         if (e.getAuthor().isBot()) {
             return;
         }
@@ -88,94 +104,88 @@ public class Main extends ListenerAdapter {
         switch (message) {
 
             case "!help" -> answer(e, """ 
-```yaml
-Welcome to CCBot V3.0.0, How may I assist you?
-!ip - #Get the server status and player count
-!list - #Get status for each server
-!servers - #Lists all servers
-!myip - #Find what your current IP is
-!uuid - #Find out how to obtain your UUID
-!web - #Gives the link to the CC website
-!perf - #Gives performance tips for Minecraft
-!CC help - #List more advanced features");
-```""");
+                    ```yaml
+                    Welcome to CCBot V3.0.0, How may I assist you?
+                    !ip - #Get the server status and player count
+                    !list - #Get status for each server
+                    !servers - #Lists all servers
+                    !myip - #Find what your current IP is
+                    !uuid - #Find out how to obtain your UUID
+                    !web - #Gives the link to the CC website
+                    !perf - #Gives performance tips for Minecraft
+                    !CC help - #List more advanced features");
+                    ```""");
             case "!list" -> status(e);
-            case "!ip" -> answer(e, "```yaml\nServer IPs:\n" + list_ips + "```");
+            case "!ip" -> answer(e, "```yaml\nServer IPs:\n" + serverList + "```");
             case "!myip" -> answer(e, "You can get your ip using: https://api64.ipify.org/");
-            case "!servers" -> answer(e, "```yaml\nServers:\n" + list_servers + "```");
+            case "!servers" -> answer(e, "```yaml\nServers:\n" + serverList + "```");
             case "!web" -> answer(e, website);
-            case "!uuid" -> {
-                try {
-                    answer(e, findUUID(e));
-                } catch (IOException ex) {
-                    throw new RuntimeException(ex);
-                }
-            }
+            case "!uuid" -> answer(e, findUUID(e));
             case "!perf" -> answer(e, """ 
-```yaml
-CCBot's Performance Tuning Tips!
-Type these commands to go to the page you want:
+                    ```yaml
+                    CCBot's Performance Tuning Tips!
+                    Type these commands to go to the page you want:
 
-!args - #Get tuning tips for the Java Virtual Machine
-!fabric - #Explains how to install fabric
-!mods - #Get a list of recommended fabric performance mods
-```""");
+                    !args - #Get tuning tips for the Java Virtual Machine
+                    !fabric - #Explains how to install fabric
+                    !mods - #Get a list of recommended fabric performance mods
+                    ```""");
             case "!args" -> answer(e, """ 
-```yaml
-A Guide to Minecraft JVM Arguments
-----------------------------------
-Step 1 - Find a good JDK
-A JDK in simple terms is a Java distribution. CorrettoJDK is currently one of the best <https://aws.amazon.com/corretto/?filtered-posts.sort-by=item.additionalFields.createdDate&filtered-posts.sort-order=desc>
-Just extract it and set your Java path to it in the Minecraft Launcher.
+                    ```yaml
+                    A Guide to Minecraft JVM Arguments
+                    ----------------------------------
+                    Step 1 - Find a good JDK
+                    A JDK in simple terms is a Java distribution. CorrettoJDK is currently one of the best <https://aws.amazon.com/corretto/?filtered-posts.sort-by=item.additionalFields.createdDate&filtered-posts.sort-order=desc>
+                    Just extract it and set your Java path to it in the Minecraft Launcher.
 
-Step 2 - Find the args
-The args section is found under a version profile. Click installations -> The 3 dots next to your profile ->  Edit -> More Options.
-Once there, find the  JVM Arguments section. Do note that I am assuming you have around 8GB of ram in your machine, change the Xmx variable to represent your machine's ram. Here you have some options for arguments to past in there:
--------------------------------------------------
-#G1GC - For older hardware
+                    Step 2 - Find the args
+                    The args section is found under a version profile. Click installations -> The 3 dots next to your profile ->  Edit -> More Options.
+                    Once there, find the  JVM Arguments section. Do note that I am assuming you have around 8GB of ram in your machine, change the Xmx variable to represent your machine's ram. Here you have some options for arguments to past in there:
+                    -------------------------------------------------
+                    #G1GC - For older hardware
 
--Xms4G -Xmx4G -Xmn768m -XX:+AggressiveOpts -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+PerfDisableSharedMem -XX:+UseCompressedOops -XX:-UsePerfData -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2 -XX:+UseG1GC -XX:InitiatingHeapOccupancyPercent=50 -XX:G1HeapRegionSize=1 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=8
--------------------------------------------------
-#Shenandoah - For more modern hardware
+                    -Xms4G -Xmx4G -Xmn768m -XX:+AggressiveOpts -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+PerfDisableSharedMem -XX:+UseCompressedOops -XX:-UsePerfData -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2 -XX:+UseG1GC -XX:InitiatingHeapOccupancyPercent=50 -XX:G1HeapRegionSize=1 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=8
+                    -------------------------------------------------
+                    #Shenandoah - For more modern hardware
 
--Xms4G -Xmx4G -Xmn768m -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:+UseNUMA -XX:+AlwaysPreTouch -XX:-UseBiasedLocking -XX:+DisableExplicitGC -Dfile.encoding=UTF-8
--------------------------------------------------
-#If you use Linux, add these args to any of the ones above:
--XX:+UseLargePages -XX:LargePageSizeInBytes=2M
-```""");
+                    -Xms4G -Xmx4G -Xmn768m -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:+UseNUMA -XX:+AlwaysPreTouch -XX:-UseBiasedLocking -XX:+DisableExplicitGC -Dfile.encoding=UTF-8
+                    -------------------------------------------------
+                    #If you use Linux, add these args to any of the ones above:
+                    -XX:+UseLargePages -XX:LargePageSizeInBytes=2M
+                    ```""");
             case "!fabric" -> answer(e, """ 
-```yaml
-Installing Fabric is easy:
-1. Download fabric at https://fabricmc.net/use/installer/
-2. Run the installer while the MC launcher is closed
-3. Select the version of MC you want and click install
-4. Open the Launcher and it should appear
-5. To access the mods folder on Windows, press Win+R, then type %appdata%/.minecraft
-6. Locate a folder called "mods". If it doesn't exist, create it
-```""");
+                    ```yaml
+                    Installing Fabric is easy:
+                    1. Download fabric at https://fabricmc.net/use/installer/
+                    2. Run the installer while the MC launcher is closed
+                    3. Select the version of MC you want and click install
+                    4. Open the Launcher and it should appear
+                    5. To access the mods folder on Windows, press Win+R, then type %appdata%/.minecraft
+                    6. Locate a folder called "mods". If it doesn't exist, create it
+                    ```""");
             case "!mods" -> answer(e, """
-```yaml
-A good place to find lots of performance mods is:https://modrinth.com/mods?f=categories%3A%27optimization%27&g=categories%3A%27fabric%27&e=client
-The main ones are:
-Sodium: https://modrinth.com/mod/sodium
-Lithium: https://modrinth.com/mod/lithium
-LazyDFU: https://modrinth.com/mod/lazydfu
-Krypton: https://modrinth.com/mod/krypton
-FerriteCore: https://modrinth.com/mod/ferrite-core
-EntityCulling: https://www.curseforge.com/minecraft/mc-mods/entityculling
-ImmediateFast: https://modrinth.com/mod/immediatelyfast
-Exordium: https://modrinth.com/mod/exordium
-ForgetMeChunk: https://modrinth.com/mod/forgetmechunk
-MoreCulling: https://modrinth.com/mod/moreculling
-Enhanced Block Entities: https://modrinth.com/mod/ebe
-Better Beds: https://modrinth.com/mod/better-beds
+                    ```yaml
+                    A good place to find lots of performance mods is:https://modrinth.com/mods?f=categories%3A%27optimization%27&g=categories%3A%27fabric%27&e=client
+                    The main ones are:
+                    Sodium: https://modrinth.com/mod/sodium
+                    Lithium: https://modrinth.com/mod/lithium
+                    LazyDFU: https://modrinth.com/mod/lazydfu
+                    Krypton: https://modrinth.com/mod/krypton
+                    FerriteCore: https://modrinth.com/mod/ferrite-core
+                    EntityCulling: https://www.curseforge.com/minecraft/mc-mods/entityculling
+                    ImmediateFast: https://modrinth.com/mod/immediatelyfast
+                    Exordium: https://modrinth.com/mod/exordium
+                    ForgetMeChunk: https://modrinth.com/mod/forgetmechunk
+                    MoreCulling: https://modrinth.com/mod/moreculling
+                    Enhanced Block Entities: https://modrinth.com/mod/ebe
+                    Better Beds: https://modrinth.com/mod/better-beds
 
-Additional mods you'll need:
-Fabric API: https://modrinth.com/mod/fabric-api
-Indium: https://modrinth.com/mod/indium
-```""");
+                    Additional mods you'll need:
+                    Fabric API: https://modrinth.com/mod/fabric-api
+                    Indium: https://modrinth.com/mod/indium
+                    ```""");
         }
-if (message.startsWith("!CC") || message.startsWith("@CC")) {
+        if (message.startsWith("!CC") || message.startsWith("@CC")) {
             if (e.getMember().getRoles().stream().noneMatch(role -> role.getName().equals(admin_role))) {
                 answer(e, "You must be an admin to use these commands!");
             } else {
@@ -187,6 +197,7 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
             }
         }
     }
+
     private Stream<Server> findServer(MessageReceivedEvent e, String name) {
         if (name == null) {
             return servers.stream();
@@ -199,9 +210,9 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
 
     private void status(MessageReceivedEvent e) {
         answer(e, """
-                ```yaml
-                Servers:
-                """ + servers.stream().map(Server::status).collect(Collectors.joining("\n")) + "```");
+                          ```yaml
+                          Servers:
+                          """ + servers.stream().map(Server::status).collect(joining("\n")) + "```");
     }
 
     private void handleAdmin(MessageReceivedEvent e) throws InterruptedException {
@@ -211,11 +222,12 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
 // CCBot's main functions
 
         switch (action.toLowerCase()) {
-            case "start" -> answer(e, findServer(e, name).map(server -> server.start(e)).collect(Collectors.joining("\n")));
-            case "stop" -> answer(e, findServer(e, name).map(Server::stop).collect(Collectors.joining("\n")));
+            case "start" -> answer(e, findServer(e, name).map(server -> server.start(e)).collect(joining("\n")));
+            case "stop" -> answer(e, findServer(e, name).map(Server::stop).collect(joining("\n")));
             case "kill" -> findServer(e, name).forEach(server -> server.kill(e));
             case "status" -> status(e);
-            case "exec" -> findServer(e, name).forEach(server -> server.exec(e, Arrays.stream(s).skip(2).collect(Collectors.joining(" "))));
+            case "exec" ->
+                    findServer(e, name).forEach(server -> server.exec(e, Arrays.stream(s).skip(2).collect(joining(" "))));
             case "ignore_if_busy" -> findServer(e, name).forEach(server -> server.ignore_if_busy(e));
             case "external_stop" -> externalStop(e, name);
             case "external_kill" -> externalKill(e, name);
@@ -230,12 +242,13 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
 
 // IP
             case "iplist" -> readIps(e);
-            case "setip" -> writeIps(e, Arrays.stream(s).skip(1).collect(Collectors.joining(" ")));
+            case "setip" -> writeIps(e, Arrays.stream(s).skip(1).collect(joining(" ")));
             case "addplayer" -> addPlayer(e, s[1], s[2], s[3]);
             case "removeplayer" -> removePlayer(e, s[1]);
             case "changeip" -> changeIP(e, s[1], s[2]);
 // Bot
-            case "bot_terminate" -> answer(e, "Are you sure you want to do this? This will kill the bot permanently! Run !CC term_continue to proceed.");
+            case "bot_terminate" ->
+                    answer(e, "Are you sure you want to do this? This will kill the bot permanently! Run !CC term_continue to proceed.");
             case "term_continue" -> System.exit(0);
             case "bot_pause" -> Thread.sleep(3600000);
 // Basic Help command that list these actions^
@@ -243,15 +256,15 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
                     ```yaml
                     Welcome to CCBot 3.0.0, An OpenSource Server Management Companion!
                     I offer many helpful options for your convenience.
-                    
+                                        
                     Do !CC [category]
                     Help categories:
                     - help-server
                     #info about server commands
-                    
+                                        
                     - help-log
                     #info about logging
-                    
+                                        
                     - help-offline
                     #info about offline players
 
@@ -284,7 +297,7 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
                     - stop_tmp_logs [server] #stop recoding the server's logs
                     - clear_tmp_logs [server] #clears the temporary saved logs
                     - logs [server] #gives the latest.log file
-                    ```""");        
+                    ```""");
             case "help-offline" -> answer(e, """
                     ```yaml
                     Try !CC with:
@@ -303,7 +316,7 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
                     If the bot needs to be killed for whatever reason, run !CC bot_terminate.
                     THIS ACTION CANNOT BE UNDONE!
                     ```""");
-                 
+
             default -> answer(e, "That isn't one of my options. Try !CC help for my options");
         }
     }
@@ -340,7 +353,7 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
         }
         final byte[] newValue = Arrays.stream(new String(bytes).split("\n"))
                 .filter(s -> !s.startsWith(code + "|"))
-                .collect(Collectors.joining("\n")).getBytes();
+                .collect(joining("\n")).getBytes();
 
         writeIpList(e, newValue);
     }
@@ -378,7 +391,7 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
                     final String[] split = s.split("\\|");
                     return (!s.startsWith(code + "|")) ? s : (code + "|" + newip + "|" + split[2] + "|" + split[3]);
                 })
-                .collect(Collectors.joining("\n")).getBytes();
+                .collect(joining("\n")).getBytes();
         writeIpList(e, newValue);
     }
 
@@ -387,7 +400,7 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
         assert member != null;
         if (member.getRoles().stream().anyMatch(role -> role.getName().equals(owner_role))) {
             if (!private_channel.equals(e.getChannel().getName())) {
-                answer(e, "You must execute this command in "+private_channel+".");
+                answer(e, "You must execute this command in " + private_channel + ".");
                 return true;
             }
             return false;
@@ -402,7 +415,6 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
         if (notOwner(e)) {
             return;
         }
-        final File ipList = new File(new File(crummerCraft.startFile.getParentFile(), "config"), "offline-ip-list.txt");
         try (OutputStream stream = new FileOutputStream(ipList)) {
             stream.write(message.getBytes());
             stream.flush();
@@ -418,8 +430,6 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
         if (notOwner(e)) {
             return;
         }
-
-        final File ipList = new File(new File(crummerCraft.startFile.getParentFile(), "config"), "offline-ip-list.txt");
         e.getChannel().sendFiles(FileUpload.fromData(ipList)).submit();
     }
 
@@ -428,7 +438,7 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
         if (jarContains(pid)) {
             answer(e, "The process " + pid + " is going to be destroyed");
             try {
-                Runtime.getRuntime().exec("/usr/bin/kill -9 " + pid);
+                Runtime.getRuntime().exec(new String[]{"/usr/bin/kill", "-9", pid});
             } catch (IOException ioException) {
                 ioException.printStackTrace();
                 answer(e, "Couldn't destroy the server!");
@@ -445,7 +455,7 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
         if (jarContains(pid)) {
             answer(e, "The process " + pid + " is going to be stopped");
             try {
-                Runtime.getRuntime().exec("/usr/bin/kill " + pid);
+                Runtime.getRuntime().exec(new String[]{"/usr/bin/kill", pid});
             } catch (IOException ioException) {
                 ioException.printStackTrace();
                 answer(e, "Couldn't stop the server!");
@@ -461,7 +471,7 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
     private void listRunningJars(MessageReceivedEvent e) {
         try {
             final StringBuilder builder = new StringBuilder();
-            final Process process = Runtime.getRuntime().exec("/bin/ps -eo pid,comm,command");
+            final Process process = Runtime.getRuntime().exec(new String[]{"/bin/ps", "-eo", "pid,comm,command"});
             final BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String line;
             while ((line = reader.readLine()) != null) {
@@ -479,7 +489,7 @@ if (message.startsWith("!CC") || message.startsWith("@CC")) {
 
     private boolean jarContains(String pid) {
         try {
-            final Process process = Runtime.getRuntime().exec("/bin/ps -eo pid,comm");
+            final Process process = Runtime.getRuntime().exec(new String[]{"/bin/ps", "-eo", "pid,comm"});
             final BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String line;
             while ((line = reader.readLine()) != null) {

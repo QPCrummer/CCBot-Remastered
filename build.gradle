@@ -6,22 +6,21 @@ plugins {
 group 'net.ddns.crummercraft'
 version '3.0.0'
 
-sourceCompatibility = targetCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
+sourceCompatibility = JavaVersion.VERSION_17
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    implementation 'net.dv8tion:JDA:5.0.0-alpha.22'
-    implementation 'com.google.code.gson:gson:2.10'
+    implementation 'net.dv8tion:JDA:5.0.0-beta.3'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.14.2'
 }
 
 shadowJar {
     manifest {
-        attributes(
-                'Main-Class': 'net.ddns.crummercraft.Main'
-        )
+        attributes('Main-Class': 'net.ddns.crummercraft.Main')
     }
     minimize()
 }
