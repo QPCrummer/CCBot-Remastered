@@ -26,33 +26,17 @@ public class ChatUtils {
     }
 
     public static String readJSON(MessageReceivedEvent e) throws IOException {
-        final URL url = new URL("https://playerdb.co/api/player/minecraft/" + separateName(e));
+        final URL url = new URL("https://api.mojang.com/users/profiles/minecraft/" + separateName(e));
         final ObjectReader reader = new ObjectMapper().readerFor(UUID.class);
         final UUID response = reader.readValue(url);
-        return response.data.player.id;
+        return response.data;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record UUID(ChatUtils.UUID.Data data) {
+    private record UUID(String data) {
         @JsonCreator
-        private UUID(@JsonProperty("data") Data data) {
+        private UUID(@JsonProperty("id") String data) {
             this.data = data;
-        }
-        @JsonIgnoreProperties(ignoreUnknown = true)
-
-        private record Data(UUID.Data.Player player) {
-            @JsonCreator
-            private Data(@JsonProperty("player") Player player) {
-                this.player = player;
-            }
-            @JsonIgnoreProperties(ignoreUnknown = true)
-
-            private record Player(String id) {
-                @JsonCreator
-                private Player(@JsonProperty("id") String id) {
-                    this.id = id;
-                }
-            }
         }
     }
 }
