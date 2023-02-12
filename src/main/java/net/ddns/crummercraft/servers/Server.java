@@ -1,13 +1,18 @@
 package net.ddns.crummercraft.servers;
 
+import gs.mclo.java.APIResponse;
+import gs.mclo.java.MclogsAPI;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.utils.FileUpload;
 
 import java.io.*;
+import java.nio.file.Paths;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 public class Server{
 
@@ -28,7 +33,14 @@ public class Server{
     private String pid;
 
     public Server(ServerData info, Consumer<MessageReceivedEvent> onStarting, Consumer<MessageReceivedEvent> onStopped) {
-        this.startFile = new File(info.serverFolder()+"/start.sh");
+        String os = System.getProperty("os.name");
+        String start_file;
+        if (os.contains("Windows")) {
+            start_file = "/start.bat";
+        } else {
+            start_file = "/start.sh";
+        }
+        this.startFile = new File(info.serverFolder()+start_file);
         this.name = info.name();
         this.ip = info.serverIP();
         this.info = info;
@@ -43,7 +55,7 @@ public class Server{
 
     protected boolean tryAcquire(MessageReceivedEvent e) {
         if (!semaphore.tryAcquire()) {
-            log(e, " is handling another command. Please wait or do @CC ignore_if_busy");
+            log(e, " is handling another command. Please wait or do !CC ignore_if_busy");
             return false;
         }
         return true;
@@ -221,7 +233,16 @@ public class Server{
 
     public void readLatestLog(MessageReceivedEvent e) {
         final File latest = new File(new File(startFile.getParentFile(), "logs"), "latest.log");
-        e.getChannel().sendFiles(FileUpload.fromData(latest)).submit();
+        try {
+            APIResponse mclogs = MclogsAPI.share(Paths.get(latest.getPath()));
+            assertTrue(mclogs.success);
+            assertNotNull(mclogs.id);
+            assertNotNull(mclogs.url);
+            assertNull(mclogs.error);
+            e.getChannel().sendMessage("Here is the latest log: " + mclogs.url).submit();
+        } catch (IOException ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
     public void realLogs(MessageReceivedEvent e) {

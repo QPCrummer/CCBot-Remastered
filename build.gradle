@@ -4,18 +4,21 @@ plugins {
 }
 
 group 'net.ddns.crummercraft'
-version '3.0.0'
+version '3.1.0'
 
 targetCompatibility = JavaVersion.VERSION_17
 sourceCompatibility = JavaVersion.VERSION_17
 
 repositories {
     mavenCentral()
+    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
     implementation 'net.dv8tion:JDA:5.0.0-beta.3'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.14.2'
+    implementation 'com.github.aternosorg:mclogs-java:v2.2.0'
+    implementation 'org.junit.jupiter:junit-jupiter:5.8.1'
 }
 
 shadowJar {

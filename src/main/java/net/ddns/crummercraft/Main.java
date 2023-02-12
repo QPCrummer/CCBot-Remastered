@@ -105,15 +105,15 @@ public class Main extends ListenerAdapter {
 
             case "!help" -> answer(e, """ 
                     ```yaml
-                    Welcome to CCBot V3.0.0, How may I assist you?
+                    Welcome to CCBot V3.1.0, How may I assist you?
                     !ip - #Get the server status and player count
                     !list - #Get status for each server
                     !servers - #Lists all servers
                     !myip - #Find what your current IP is
                     !uuid - #Find out how to obtain your UUID
                     !web - #Gives the link to the CC website
-                    !perf - #Gives performance tips for Minecraft
-                    !CC help - #List more advanced features");
+                    !mods - #Instructions for installing FabricMC
+                    !CC help - #List admin features");
                     ```""");
             case "!list" -> status(e);
             case "!ip" -> answer(e, "```yaml\nServer IPs:\n" + serverList + "```");
@@ -121,68 +121,9 @@ public class Main extends ListenerAdapter {
             case "!servers" -> answer(e, "```yaml\nServers:\n" + serverList + "```");
             case "!web" -> answer(e, website);
             case "!uuid" -> answer(e, findUUID(e));
-            case "!perf" -> answer(e, """ 
-                    ```yaml
-                    CCBot's Performance Tuning Tips!
-                    Type these commands to go to the page you want:
-
-                    !args - #Get tuning tips for the Java Virtual Machine
-                    !fabric - #Explains how to install fabric
-                    !mods - #Get a list of recommended fabric performance mods
-                    ```""");
-            case "!args" -> answer(e, """ 
-                    ```yaml
-                    A Guide to Minecraft JVM Arguments
-                    ----------------------------------
-                    Step 1 - Find a good JDK
-                    A JDK in simple terms is a Java distribution. CorrettoJDK is currently one of the best <https://aws.amazon.com/corretto/?filtered-posts.sort-by=item.additionalFields.createdDate&filtered-posts.sort-order=desc>
-                    Just extract it and set your Java path to it in the Minecraft Launcher.
-
-                    Step 2 - Find the args
-                    The args section is found under a version profile. Click installations -> The 3 dots next to your profile ->  Edit -> More Options.
-                    Once there, find the  JVM Arguments section. Do note that I am assuming you have around 8GB of ram in your machine, change the Xmx variable to represent your machine's ram. Here you have some options for arguments to past in there:
-                    -------------------------------------------------
-                    #G1GC - For older hardware
-
-                    -Xms4G -Xmx4G -Xmn768m -XX:+AggressiveOpts -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+PerfDisableSharedMem -XX:+UseCompressedOops -XX:-UsePerfData -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2 -XX:+UseG1GC -XX:InitiatingHeapOccupancyPercent=50 -XX:G1HeapRegionSize=1 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=8
-                    -------------------------------------------------
-                    #Shenandoah - For more modern hardware
-
-                    -Xms4G -Xmx4G -Xmn768m -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:ShenandoahGCMode=iu -XX:+UseNUMA -XX:+AlwaysPreTouch -XX:-UseBiasedLocking -XX:+DisableExplicitGC -Dfile.encoding=UTF-8
-                    -------------------------------------------------
-                    #If you use Linux, add these args to any of the ones above:
-                    -XX:+UseLargePages -XX:LargePageSizeInBytes=2M
-                    ```""");
-            case "!fabric" -> answer(e, """ 
-                    ```yaml
-                    Installing Fabric is easy:
-                    1. Download fabric at https://fabricmc.net/use/installer/
-                    2. Run the installer while the MC launcher is closed
-                    3. Select the version of MC you want and click install
-                    4. Open the Launcher and it should appear
-                    5. To access the mods folder on Windows, press Win+R, then type %appdata%/.minecraft
-                    6. Locate a folder called "mods". If it doesn't exist, create it
-                    ```""");
             case "!mods" -> answer(e, """
                     ```yaml
-                    A good place to find lots of performance mods is:https://modrinth.com/mods?f=categories%3A%27optimization%27&g=categories%3A%27fabric%27&e=client
-                    The main ones are:
-                    Sodium: https://modrinth.com/mod/sodium
-                    Lithium: https://modrinth.com/mod/lithium
-                    LazyDFU: https://modrinth.com/mod/lazydfu
-                    Krypton: https://modrinth.com/mod/krypton
-                    FerriteCore: https://modrinth.com/mod/ferrite-core
-                    EntityCulling: https://www.curseforge.com/minecraft/mc-mods/entityculling
-                    ImmediateFast: https://modrinth.com/mod/immediatelyfast
-                    Exordium: https://modrinth.com/mod/exordium
-                    ForgetMeChunk: https://modrinth.com/mod/forgetmechunk
-                    MoreCulling: https://modrinth.com/mod/moreculling
-                    Enhanced Block Entities: https://modrinth.com/mod/ebe
-                    Better Beds: https://modrinth.com/mod/better-beds
-
-                    Additional mods you'll need:
-                    Fabric API: https://modrinth.com/mod/fabric-api
-                    Indium: https://modrinth.com/mod/indium
+                    Here is a tutorial for installing mods for Fabric: https://sites.google.com/view/crummer-craft/how-to-install-mods?authuser=1
                     ```""");
         }
         if (message.startsWith("!CC") || message.startsWith("@CC")) {
@@ -226,8 +167,7 @@ public class Main extends ListenerAdapter {
             case "stop" -> answer(e, findServer(e, name).map(Server::stop).collect(joining("\n")));
             case "kill" -> findServer(e, name).forEach(server -> server.kill(e));
             case "status" -> status(e);
-            case "exec" ->
-                    findServer(e, name).forEach(server -> server.exec(e, Arrays.stream(s).skip(2).collect(joining(" "))));
+            case "exec" -> findServer(e, name).forEach(server -> server.exec(e, Arrays.stream(s).skip(2).collect(joining(" "))));
             case "ignore_if_busy" -> findServer(e, name).forEach(server -> server.ignore_if_busy(e));
             case "external_stop" -> externalStop(e, name);
             case "external_kill" -> externalKill(e, name);
@@ -239,7 +179,6 @@ public class Main extends ListenerAdapter {
             case "stop_tmp_logs" -> findServer(e, name).forEach(server -> server.stopRealLogs(e));
             case "clear_tmp_logs" -> findServer(e, name).forEach(Server::clearRealLogs);
             case "logs" -> findServer(e, name).forEach(server -> server.readLatestLog(e));
-
 // IP
             case "iplist" -> readIps(e);
             case "setip" -> writeIps(e, Arrays.stream(s).skip(1).collect(joining(" ")));
@@ -247,14 +186,13 @@ public class Main extends ListenerAdapter {
             case "removeplayer" -> removePlayer(e, s[1]);
             case "changeip" -> changeIP(e, s[1], s[2]);
 // Bot
-            case "bot_terminate" ->
-                    answer(e, "Are you sure you want to do this? This will kill the bot permanently! Run !CC term_continue to proceed.");
+            case "bot_terminate" -> answer(e, "Are you sure you want to do this? This will kill the bot permanently! Run !CC term_continue to proceed.");
             case "term_continue" -> System.exit(0);
             case "bot_pause" -> Thread.sleep(3600000);
 // Basic Help command that list these actions^
             case "help" -> answer(e, """
                     ```yaml
-                    Welcome to CCBot 3.0.0, An OpenSource Server Management Companion!
+                    Welcome to CCBot 3.1.0, An OpenSource Server Management Companion!
                     I offer many helpful options for your convenience.
                                         
                     Do !CC [category]
