@@ -165,6 +165,7 @@ public class Main extends ListenerAdapter {
         switch (action.toLowerCase()) {
             case "start" -> answer(e, findServer(e, name).map(server -> server.start(e)).collect(joining("\n")));
             case "stop" -> answer(e, findServer(e, name).map(Server::stop).collect(joining("\n")));
+            case "restart" -> answer(e, findServer(e, name).map(server -> server.restart(e)).collect(joining("\n")));
             case "kill" -> findServer(e, name).forEach(server -> server.kill(e));
             case "status" -> status(e);
             case "exec" -> findServer(e, name).forEach(server -> server.exec(e, Arrays.stream(s).skip(2).collect(joining(" "))));
@@ -218,6 +219,7 @@ public class Main extends ListenerAdapter {
                     Try !CC with:
                     - start [server] #starts servers
                     - stop [server] #stops servers
+                    - restart [server] #restarts servers
                     - kill [server] #kills servers; only do if needed
                     - status #shows current status of each server
                     - exec <server> #executes commands in-game

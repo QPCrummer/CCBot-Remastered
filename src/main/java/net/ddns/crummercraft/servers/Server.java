@@ -90,15 +90,7 @@ public class Server{
         return "stop\n";
     }
 
-    public String start(MessageReceivedEvent e) {
-        if (!semaphore.tryAcquire()) {
-            return name + " is busy";
-        }
-        if (running.getAndSet(true)) {
-            semaphore.release();
-            return name + " is already running";
-        }
-
+    private String startAction(MessageReceivedEvent e) {
         try {
             process = Runtime.getRuntime().exec(new String[]{startFile.getAbsolutePath()});
             new Thread(() -> readLogs(e)).start();
@@ -110,15 +102,7 @@ public class Server{
         return name + " is starting";
     }
 
-    public String stop() {
-        if (!semaphore.tryAcquire()) {
-            return name + " is busy";
-        }
-        if (!running.getAndSet(false)) {
-            semaphore.release();
-            return name + " is already down";
-        }
-
+    private String stopAction() {
         try {
             process.getOutputStream().write(stopSignal().getBytes());
             process.getOutputStream().flush();
@@ -129,9 +113,48 @@ public class Server{
         return name + " is shutting down";
     }
 
+    private String restartAction(MessageReceivedEvent e) {
+        stopAction();
+        startAction(e);
+        return name + " is restarting";
+    }
+
+    public String start(MessageReceivedEvent e) {
+        if (!semaphore.tryAcquire()) {
+            return name + " is busy";
+        }
+        if (running.getAndSet(true)) {
+            semaphore.release();
+            return name + " is already running";
+        }
+        return startAction(e);
+    }
+
+    public String stop() {
+        if (!semaphore.tryAcquire()) {
+            return name + " is busy";
+        }
+        if (!running.getAndSet(false)) {
+            semaphore.release();
+            return name + " is already down";
+        }
+        return stopAction();
+    }
+
     public void ignore_if_busy(MessageReceivedEvent e) {
         semaphore.release();
         log(e, " can now execute tasks simultaneously");
+    }
+
+    public String restart(MessageReceivedEvent e) {
+        if (!semaphore.tryAcquire()) {
+            return name + " is busy";
+        }
+        if (!running.getAndSet(false)) {
+            semaphore.release();
+            return startAction(e);
+        }
+        return restartAction(e);
     }
 
     public void kill(MessageReceivedEvent e) {
