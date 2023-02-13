@@ -1,0 +1,9 @@
+{
+  "name": "Example",
+  "version": "1.19.2",
+  "path": "Example\\Path",
+  "port": 25565,
+  "ip": "127.0.0.1",
+  "isMainServer": true,
+  "isProxy": false
+}

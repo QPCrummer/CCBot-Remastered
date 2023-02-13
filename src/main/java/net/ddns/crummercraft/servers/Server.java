@@ -31,6 +31,7 @@ public class Server{
     protected Process process;
     protected String playerList;
     private String pid;
+    private int port;
 
     public Server(ServerData info, Consumer<MessageReceivedEvent> onStarting, Consumer<MessageReceivedEvent> onStopped) {
         String os = System.getProperty("os.name");
@@ -43,6 +44,7 @@ public class Server{
         this.startFile = new File(info.serverFolder()+start_file);
         this.name = info.name();
         this.ip = info.serverIP();
+        this.port = info.serverPort();
         this.info = info;
         this.minecraftVersion = info.minecraftVersion();
         this.onStarting = onStarting;
@@ -247,7 +249,7 @@ public class Server{
     }
 
     public int port() {
-        return Integer.parseInt(ip.split(":")[1]);
+        return port;
     }
 
     public void pid(MessageReceivedEvent e) {
