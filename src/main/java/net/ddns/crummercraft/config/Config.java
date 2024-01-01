@@ -1,5 +1,7 @@
 package net.ddns.crummercraft.config;
 
+import net.ddns.crummercraft.Main;
+
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -60,7 +62,7 @@ public class Config {
             properties.store(output, null);
             parse();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            Main.LOGGER.error("Failed to generate config", e);
         }
     }
 
@@ -68,7 +70,7 @@ public class Config {
         try (InputStream input = new FileInputStream(path)) {
             properties.load(input);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            Main.LOGGER.error("Failed to load config", e);
         }
     }
 

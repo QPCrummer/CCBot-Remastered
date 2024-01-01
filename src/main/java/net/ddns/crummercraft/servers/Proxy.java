@@ -1,5 +1,6 @@
 package net.ddns.crummercraft.servers;
 
+import net.ddns.crummercraft.Main;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 import java.io.File;
@@ -21,7 +22,7 @@ public class Proxy extends Server {
             localProcess.getOutputStream().write("glist\n".getBytes());
             localProcess.getOutputStream().flush();
         } catch (IOException error) {
-            error.printStackTrace();
+            Main.LOGGER.error("Failed to receive player list", error);
             playerListSemaphore.release();
             return "Failed to receive the list command!";
         }

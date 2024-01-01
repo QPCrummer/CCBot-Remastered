@@ -1,18 +1,23 @@
 package net.ddns.crummercraft.servers;
 
-import gs.mclo.java.APIResponse;
-import gs.mclo.java.MclogsAPI;
+import gs.mclo.api.Log;
+import gs.mclo.api.MclogsClient;
+import gs.mclo.api.response.UploadLogResponse;
+import net.ddns.crummercraft.Main;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
-import net.dv8tion.jda.api.utils.FileUpload;
 
 import java.io.*;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-
-import static org.junit.jupiter.api.Assertions.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Server{
 
@@ -31,7 +36,8 @@ public class Server{
     protected Process process;
     protected String playerList;
     private String pid;
-    private int port;
+    private final int port;
+    private final Path path;
 
     public Server(ServerData info, Consumer<MessageReceivedEvent> onStarting, Consumer<MessageReceivedEvent> onStopped) {
         String os = System.getProperty("os.name");
@@ -49,6 +55,7 @@ public class Server{
         this.minecraftVersion = info.minecraftVersion();
         this.onStarting = onStarting;
         this.onStopped = onStopped;
+        this.path = Paths.get(info.serverFolder());
     }
 
     public String name() {
@@ -57,7 +64,7 @@ public class Server{
 
     protected boolean tryAcquire(MessageReceivedEvent e) {
         if (!semaphore.tryAcquire()) {
-            log(e, " is handling another command. Please wait or do !CC ignore_if_busy");
+            log(e, " is handling another command. Please wait or do !CC override");
             return false;
         }
         return true;
@@ -70,7 +77,7 @@ public class Server{
             localProcess.getOutputStream().write("list\n".getBytes());
             localProcess.getOutputStream().flush();
         } catch (IOException error) {
-            error.printStackTrace();
+            Main.LOGGER.error("Failed to receive the player list", error);
             playerListSemaphore.release();
             return "Failed to receive the list command!";
         }
@@ -97,7 +104,7 @@ public class Server{
             process = Runtime.getRuntime().exec(new String[]{startFile.getAbsolutePath()});
             new Thread(() -> readLogs(e)).start();
         } catch (IOException error) {
-            error.printStackTrace();
+            Main.LOGGER.error("Failed to start server", error);
             return name + " startup failed!";
         }
         onStarting.accept(e);
@@ -109,7 +116,7 @@ public class Server{
             process.getOutputStream().write(stopSignal().getBytes());
             process.getOutputStream().flush();
         } catch (IOException error) {
-            error.printStackTrace();
+            Main.LOGGER.error("Failed to stop server", error);
             return name + " didn't received the stop command!";
         }
         return name + " is shutting down";
@@ -117,8 +124,11 @@ public class Server{
 
     private String restartAction(MessageReceivedEvent e) {
         stopAction();
-        startAction(e);
-        return name + " is restarting";
+        Thread restart = new Thread(() -> waitForShutdown(e));
+        restart.start();
+        waitForShutdown(e);
+        restart.interrupt();
+        return startAction(e);
     }
 
     public String start(MessageReceivedEvent e) {
@@ -143,7 +153,7 @@ public class Server{
         return stopAction();
     }
 
-    public void ignore_if_busy(MessageReceivedEvent e) {
+    public void override(MessageReceivedEvent e) {
         semaphore.release();
         log(e, " can now execute tasks simultaneously");
     }
@@ -172,7 +182,7 @@ public class Server{
         try {
             Runtime.getRuntime().exec(new String[]{"/usr/bin/kill", "-9", this.pid});
         } catch (IOException error) {
-            error.printStackTrace();
+            Main.LOGGER.error("Failed to kill server", error);
             log(e, "Couldn't destroyed the server!");
         }
         this.pid = null;
@@ -203,13 +213,13 @@ public class Server{
                     playerListSemaphore.release();
                     playerList = line;
                 } else if (line.contains(" joined the game")) {
-                    e.getChannel().sendMessage("```" + name + ": " + line.substring(line.indexOf("]: ") + 3, line.indexOf(" joined the game")) + " joined```").submit();
+                    e.getChannel().sendMessage("```" + name + ": " + extractPlayerName(line) + " joined```").submit();
                 } else if (line.contains(" left the game")) {
-                    e.getChannel().sendMessage("```" + name + ": " + line.substring(line.indexOf("]: ") + 3, line.indexOf(" left the game")) + " left```").submit();
+                    e.getChannel().sendMessage("```" + name + ": " + extractPlayerName(line) + " left```").submit();
                 }
             }
         } catch (IOException error) {
-            error.printStackTrace();
+            Main.LOGGER.error("Failed to read logs", error);
             log(e, "'s logs weren't produced!");
         } finally {
             waitForShutdown(e);
@@ -221,22 +231,32 @@ public class Server{
         }
     }
 
+    private String extractPlayerName(String logMessage) {
+        String regex = "\\[Server thread/INFO\\] \\(Minecraft\\) (\\w+) joined the game";
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(logMessage);
+
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        return "Unknown";
+    }
+
     private void waitForShutdown(MessageReceivedEvent e) {
         try {
             Thread.sleep(200);
             while (process.isAlive()) {
-                log(e, " has stopped logging but is still running!");
                 Thread.sleep(1000);
             }
         } catch (InterruptedException error) {
-            error.printStackTrace();
+            Main.LOGGER.warn("Shutdown interrupted");
             log(e, "'s shutdown has been interrupted!");
         }
     }
 
     protected void log(MessageReceivedEvent e, String message) {
         e.getChannel().sendMessage(name + message).submit();
-        System.out.println(name + message);
     }
 
     @Override
@@ -257,21 +277,16 @@ public class Server{
     }
 
     public void readLatestLog(MessageReceivedEvent e) {
-        final File latest = new File(new File(startFile.getParentFile(), "logs"), "latest.log");
+        Path log_path = Paths.get(path + "/logs");
+        Log log = new Log(log_path + "/latest.log");
+        MclogsClient client = new MclogsClient("CCBot", "3.2.0", this.minecraftVersion);
+        CompletableFuture<UploadLogResponse> future = client.uploadLog(log);
         try {
-            APIResponse mclogs = MclogsAPI.share(Paths.get(latest.getPath()));
-            assertTrue(mclogs.success);
-            assertNotNull(mclogs.id);
-            assertNotNull(mclogs.url);
-            assertNull(mclogs.error);
-            e.getChannel().sendMessage("Here is the latest log: " + mclogs.url).submit();
-        } catch (IOException ex) {
+            UploadLogResponse response = future.get();
+            e.getChannel().sendMessage("Here is the latest log: " + response.getUrl()).submit();
+        } catch (ExecutionException | InterruptedException ex) {
             throw new RuntimeException(ex);
         }
-    }
-
-    public void realLogs(MessageReceivedEvent e) {
-        e.getChannel().sendFiles(FileUpload.fromData(realLogs.toByteArray(), "real_logs.txt")).submit();
     }
 
     public void exec(MessageReceivedEvent e, String command) {
@@ -287,31 +302,22 @@ public class Server{
             process.getOutputStream().write((command + "\n").getBytes());
             process.getOutputStream().flush();
         } catch (IOException error) {
-            error.printStackTrace();
+            Main.LOGGER.error("Failed to execute command", error);
             log(e, " didn't received the command: " + command);
         }
         semaphore.release();
     }
 
-
-    public void startRealLogs(MessageReceivedEvent e) {
-        if (realLogging.getAndSet(true)) {
-            log(e, " is already reading real logs");
-        } else {
-            log(e, " is now reading real logs");
+    public void clearLogs(MessageReceivedEvent e) {
+        Path log_path = Paths.get(path + "/logs");
+        int counter = 0;
+        for(File file: Objects.requireNonNull(log_path.toFile().listFiles())) {
+            if (!file.getName().equals("latest.log")) {
+                file.delete();
+                counter++;
+            }
         }
-    }
-
-    public void stopRealLogs(MessageReceivedEvent e) {
-        if (realLogging.getAndSet(false)) {
-            log(e, " wasn't reading real logs");
-        } else {
-            log(e, " stopped reading real logs");
-        }
-    }
-
-    public void clearRealLogs() {
-        realLogs.reset();
+        e.getChannel().sendMessage("Cleared " + counter + " log files").submit();
     }
 
     public synchronized String status() {
@@ -323,7 +329,7 @@ public class Server{
         try {
             return " - " + name + ": " + listPlayers();
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            Main.LOGGER.error("Failed to obtain server status", e);
             return " - " + name + ": status command interrupted";
         }
     }

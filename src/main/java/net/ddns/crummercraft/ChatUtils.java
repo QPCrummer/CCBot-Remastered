@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 import java.io.IOException;
+import java.net.URI;
 import java.net.URL;
 
 public class ChatUtils {
@@ -16,7 +17,7 @@ public class ChatUtils {
         try {
             return readJSON(e);
         } catch (IOException ex) {
-            ex.printStackTrace();
+            Main.LOGGER.warn("Account not found");
             return "That account doesn't exist, or you didn't specify one";
         }
     }

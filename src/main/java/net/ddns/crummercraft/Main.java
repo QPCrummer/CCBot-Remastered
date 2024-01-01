@@ -10,6 +10,8 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.FileUpload;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -33,6 +35,7 @@ import static net.ddns.crummercraft.config.Config.website;
 import static net.ddns.crummercraft.ChatUtils.findUUID;
 
 public class Main extends ListenerAdapter {
+    public static final Logger LOGGER = LoggerFactory.getLogger("CCBot");
     private final List<Server> servers;
     private final File ipList;
     public String serverList;
@@ -80,8 +83,7 @@ public class Main extends ListenerAdapter {
 
     public static void answer(MessageReceivedEvent e, String message) {
         if (e.getMember() == null) {
-            System.out.println("This user didn't receive this message:" + e.getAuthor().getName());
-            System.out.println(message);
+            LOGGER.warn(e.getAuthor().getName() + " didn't receive this message:" + message);
         }
         e.getChannel().sendMessage(message).submit();
     }
@@ -107,7 +109,7 @@ public class Main extends ListenerAdapter {
                     ```yaml
                     Welcome to CCBot V3.1.0, How may I assist you?
                     !ip - #Get the server status and player count
-                    !list - #Get status for each server
+                    !status - #Get status for each server
                     !servers - #Lists all servers
                     !myip - #Find what your current IP is
                     !uuid - #Find out how to obtain your UUID
@@ -115,7 +117,7 @@ public class Main extends ListenerAdapter {
                     !mods - #Instructions for installing FabricMC
                     !CC help - #List admin features");
                     ```""");
-            case "!list" -> status(e);
+            case "!status" -> status(e);
             case "!ip" -> answer(e, "```yaml\nServer IPs:\n" + serverList + "```");
             case "!myip" -> answer(e, "You can get your ip using: https://api64.ipify.org/");
             case "!servers" -> answer(e, "```yaml\nServers:\n" + serverList + "```");
@@ -126,14 +128,14 @@ public class Main extends ListenerAdapter {
                     Here is a tutorial for installing mods for Fabric: https://sites.google.com/view/crummer-craft/how-to-install-mods?authuser=1
                     ```""");
         }
-        if (message.startsWith("!CC") || message.startsWith("@CC")) {
+        if (message.startsWith("!CC")) {
             if (e.getMember().getRoles().stream().noneMatch(role -> role.getName().equals(admin_role))) {
                 answer(e, "You must be an admin to use these commands!");
             } else {
                 try {
                     handleAdmin(e);
                 } catch (InterruptedException ex) {
-                    ex.printStackTrace();
+                    LOGGER.error("Failed to use admin commands", ex);
                 }
             }
         }
@@ -167,18 +169,14 @@ public class Main extends ListenerAdapter {
             case "stop" -> answer(e, findServer(e, name).map(Server::stop).collect(joining("\n")));
             case "restart" -> answer(e, findServer(e, name).map(server -> server.restart(e)).collect(joining("\n")));
             case "kill" -> findServer(e, name).forEach(server -> server.kill(e));
-            case "status" -> status(e);
             case "exec" -> findServer(e, name).forEach(server -> server.exec(e, Arrays.stream(s).skip(2).collect(joining(" "))));
-            case "ignore_if_busy" -> findServer(e, name).forEach(server -> server.ignore_if_busy(e));
+            case "override" -> findServer(e, name).forEach(server -> server.override(e));
             case "external_stop" -> externalStop(e, name);
             case "external_kill" -> externalKill(e, name);
-            case "list_running_jars" -> listRunningJars(e);
+            case "jar_list" -> listRunningJars(e);
             case "pid" -> findServer(e, name).forEach(server -> server.pid(e));
 // Logs
-            case "start_tmp_logs" -> findServer(e, name).forEach(server -> server.startRealLogs(e));
-            case "tmp_logs" -> findServer(e, name).forEach(server -> server.realLogs(e));
-            case "stop_tmp_logs" -> findServer(e, name).forEach(server -> server.stopRealLogs(e));
-            case "clear_tmp_logs" -> findServer(e, name).forEach(Server::clearRealLogs);
+            case "clear_logs" -> findServer(e, name).forEach(server -> server.clearLogs(e));
             case "logs" -> findServer(e, name).forEach(server -> server.readLatestLog(e));
 // IP
             case "iplist" -> readIps(e);
@@ -193,7 +191,7 @@ public class Main extends ListenerAdapter {
 // Basic Help command that list these actions^
             case "help" -> answer(e, """
                     ```yaml
-                    Welcome to CCBot 3.1.0, An OpenSource Server Management Companion!
+                    Welcome to CCBot 3.2.0, An Open-Source Server Management Companion!
                     I offer many helpful options for your convenience.
                                         
                     Do !CC [category]
@@ -221,21 +219,17 @@ public class Main extends ListenerAdapter {
                     - stop [server] #stops servers
                     - restart [server] #restarts servers
                     - kill [server] #kills servers; only do if needed
-                    - status #shows current status of each server
                     - exec <server> #executes commands in-game
-                    - ignore_if_busy [server] #override other active commands
+                    - override [server] #override other active commands
                     - external_stop <pid> #send a stop signal to a java process
                     - external_kill <pid> #kill a java process
-                    - list_running_jars #lists all running java processes
+                    - jar_list #lists all running java processes
                     - pid [server] #shows the server's process id
                     ```""");
             case "help-log" -> answer(e, """
                     ```yaml
                     Try !CC with:
-                    - start_tmp_logs [server] #start recoding the server's logs
-                    - tmp_logs [server] #gives the temporary saved logs
-                    - stop_tmp_logs [server] #stop recoding the server's logs
-                    - clear_tmp_logs [server] #clears the temporary saved logs
+                    - clear_logs [server] #clears the saved logs
                     - logs [server] #gives the latest.log file
                     ```""");
             case "help-offline" -> answer(e, """
@@ -265,7 +259,7 @@ public class Main extends ListenerAdapter {
         try (InputStream stream = new FileInputStream(ipList)) {
             return stream.readAllBytes();
         } catch (IOException ioException) {
-            ioException.printStackTrace();
+            LOGGER.error("An IO error occurred while reading", ioException);
             answer(e, "An IO error occurred while reading!");
             return null;
         }
@@ -276,7 +270,7 @@ public class Main extends ListenerAdapter {
             stream.write(value);
             stream.flush();
         } catch (IOException ioException) {
-            ioException.printStackTrace();
+            LOGGER.error("An IO error occurred while reading", ioException);
             answer(e, "An IO error occurred while writing!");
             return;
         }
@@ -317,7 +311,7 @@ public class Main extends ListenerAdapter {
     }
 
     private void changeIP(MessageReceivedEvent e, String code, String newip) {
-        System.out.println(e.getMessage().getContentDisplay());
+        LOGGER.info(e.getMessage().getContentDisplay());
         if (newip.contains("|") || newip.contains("\n") || newip.contains("\0")) {
             answer(e, "Parameters should not contain any special characters");
             return;
@@ -359,7 +353,7 @@ public class Main extends ListenerAdapter {
             stream.write(message.getBytes());
             stream.flush();
         } catch (IOException ioException) {
-            ioException.printStackTrace();
+            LOGGER.error("An IO error occurred while reading", ioException);
             answer(e, "An IO error occurred!");
             return;
         }
@@ -380,7 +374,7 @@ public class Main extends ListenerAdapter {
             try {
                 Runtime.getRuntime().exec(new String[]{"/usr/bin/kill", "-9", pid});
             } catch (IOException ioException) {
-                ioException.printStackTrace();
+                LOGGER.error("Couldn't destroy the server", ioException);
                 answer(e, "Couldn't destroy the server!");
             }
         } else {
@@ -397,7 +391,7 @@ public class Main extends ListenerAdapter {
             try {
                 Runtime.getRuntime().exec(new String[]{"/usr/bin/kill", pid});
             } catch (IOException ioException) {
-                ioException.printStackTrace();
+                LOGGER.error("Couldn't stop the server", ioException);
                 answer(e, "Couldn't stop the server!");
             }
         } else {
@@ -423,7 +417,7 @@ public class Main extends ListenerAdapter {
             answer(e, builder.toString());
             process.destroy();
         } catch (IOException ioException) {
-            ioException.printStackTrace();
+            LOGGER.error("Couldn't destroy the processes", ioException);
         }
     }
 
@@ -445,7 +439,7 @@ public class Main extends ListenerAdapter {
             reader.close();
             process.destroy();
         } catch (IOException ioException) {
-            ioException.printStackTrace();
+            LOGGER.error("Couldn't destroy the process", ioException);
         }
         return false;
     }
