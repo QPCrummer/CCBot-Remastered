@@ -13,26 +13,15 @@ import net.dv8tion.jda.api.utils.FileUpload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
 
 import static java.util.Comparator.comparingInt;
 import static java.util.stream.Collectors.joining;
-import static net.ddns.crummercraft.config.Config.admin_role;
-import static net.ddns.crummercraft.config.Config.owner_role;
-import static net.ddns.crummercraft.config.Config.private_channel;
-import static net.ddns.crummercraft.config.Config.token;
-import static net.ddns.crummercraft.config.Config.website;
 import static net.ddns.crummercraft.ChatUtils.findUUID;
+import static net.ddns.crummercraft.config.Config.*;
 
 public class Main extends ListenerAdapter {
     public static final Logger LOGGER = LoggerFactory.getLogger("CCBot");
@@ -45,16 +34,20 @@ public class Main extends ListenerAdapter {
 
     public Main() {
         this.servers = ServerConfigReader.listServers(e -> {
-            if (proxyServer.isRunning()) {
-                e.getJDA().getPresence().setStatus(OnlineStatus.ONLINE);
-            } else {
-                e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE);
+            if (proxyServer != null) {
+                if (proxyServer.isRunning()) {
+                    e.getJDA().getPresence().setStatus(OnlineStatus.ONLINE);
+                } else {
+                    e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE);
+                }
             }
         }, e -> {
-            if (proxyServer.isRunning()) {
-                e.getJDA().getPresence().setStatus(OnlineStatus.IDLE);
-            } else {
-                e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE);
+            if (proxyServer != null) {
+                if (proxyServer.isRunning()) {
+                    e.getJDA().getPresence().setStatus(OnlineStatus.IDLE);
+                } else {
+                    e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE);
+                }
             }
         }, e -> {
             if (mainServer.isRunning()) {
@@ -65,7 +58,7 @@ public class Main extends ListenerAdapter {
         }, e -> e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE));
 
         mainServer = servers.stream().filter(server -> server.info.isMainServer()).findFirst().orElseThrow(() -> new RuntimeException("No main server found"));
-        proxyServer = servers.stream().filter(server -> server.info.isProxy()).findFirst().orElseThrow(() -> new RuntimeException("No proxy server found"));
+        proxyServer = servers.stream().filter(server -> server.info.isProxy()).findFirst().orElse(null);
 
         this.ipList = new File(new File(mainServer.info.serverFolder(), "config"), "offline-ip-list.txt");
 
