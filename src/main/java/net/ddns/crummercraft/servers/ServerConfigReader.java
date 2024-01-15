@@ -2,12 +2,14 @@ package net.ddns.crummercraft.servers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
+import net.ddns.crummercraft.Main;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -48,14 +50,26 @@ public class ServerConfigReader {
     }
 
     public static List<Server> listServers(Consumer<MessageReceivedEvent> onMainStart, Consumer<MessageReceivedEvent> onMainStop, Consumer<MessageReceivedEvent> onProxyStart, Consumer<MessageReceivedEvent> onProxyStop) {
-        return listServerInfos().stream().map(serverInfo -> {
-            if (serverInfo.isMainServer()) {
-                return new Server(serverInfo, onMainStart, onMainStop);
-            } else if (serverInfo.isProxy()) {
-                return new Proxy(serverInfo, onProxyStart, onProxyStop);
-            } else {
-                return new Server(serverInfo, NOOP, NOOP);
-            }
-        }).toList();
+        return listServerInfos().stream()
+                .filter(ServerConfigReader::checkIfServerExists)
+                .map(serverInfo -> {
+                    if (serverInfo.isMainServer()) {
+                        return new Server(serverInfo, onMainStart, onMainStop);
+                    } else if (serverInfo.isProxy()) {
+                        return new Proxy(serverInfo, onProxyStart, onProxyStop);
+                    } else {
+                        return new Server(serverInfo, NOOP, NOOP);
+                    }
+                }).toList();
+    }
+
+    private static boolean checkIfServerExists(ServerData data) {
+        Path path = Paths.get(data.serverFolder());
+        if (Files.notExists(path)) {
+            Main.LOGGER.warn(data.name() + " does not exist: " + path + "! Ignoring!");
+            return false;
+        } else {
+            return true;
+        }
     }
 }

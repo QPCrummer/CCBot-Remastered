@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'net.ddns.crummercraft'
-version '3.2.0'
+version '3.2.1'
 
 targetCompatibility = JavaVersion.VERSION_17
 sourceCompatibility = JavaVersion.VERSION_17
@@ -19,6 +19,8 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.0'
     implementation 'gs.mclo:api:4.0.1'
     implementation 'org.junit.jupiter:junit-jupiter:5.8.1'
+    implementation 'org.slf4j:slf4j-api:2.1.0-alpha1'
+    implementation 'org.slf4j:slf4j-jdk14:2.1.0-alpha1'
 }
 
 shadowJar {

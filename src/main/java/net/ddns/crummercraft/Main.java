@@ -38,7 +38,7 @@ public class Main extends ListenerAdapter {
                 if (proxyServer.isRunning()) {
                     e.getJDA().getPresence().setStatus(OnlineStatus.ONLINE);
                 } else {
-                    e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE);
+                    e.getJDA().getPresence().setStatus(OnlineStatus.DO_NOT_DISTURB);
                 }
             }
         }, e -> {
@@ -46,7 +46,7 @@ public class Main extends ListenerAdapter {
                 if (proxyServer.isRunning()) {
                     e.getJDA().getPresence().setStatus(OnlineStatus.IDLE);
                 } else {
-                    e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE);
+                    e.getJDA().getPresence().setStatus(OnlineStatus.DO_NOT_DISTURB);
                 }
             }
         }, e -> {
@@ -55,7 +55,7 @@ public class Main extends ListenerAdapter {
             } else {
                 e.getJDA().getPresence().setStatus(OnlineStatus.IDLE);
             }
-        }, e -> e.getJDA().getPresence().setStatus(OnlineStatus.OFFLINE));
+        }, e -> e.getJDA().getPresence().setStatus(OnlineStatus.DO_NOT_DISTURB));
 
         mainServer = servers.stream().filter(server -> server.info.isMainServer()).findFirst().orElseThrow(() -> new RuntimeException("No main server found"));
         proxyServer = servers.stream().filter(server -> server.info.isProxy()).findFirst().orElse(null);
@@ -68,7 +68,7 @@ public class Main extends ListenerAdapter {
     public static void main(String[] args) {
         new Config();
         JDABuilder.createDefault(token)
-                .setStatus(OnlineStatus.OFFLINE)
+                .setStatus(OnlineStatus.DO_NOT_DISTURB)
                 .addEventListeners(new Main())
                 .enableIntents(GatewayIntent.MESSAGE_CONTENT)
                 .build();
@@ -106,7 +106,7 @@ public class Main extends ListenerAdapter {
                     !servers - #Lists all servers
                     !myip - #Find what your current IP is
                     !uuid - #Find out how to obtain your UUID
-                    !web - #Gives the link to the CC website
+                    !web - #Gives the link to the server website
                     !mods - #Instructions for installing FabricMC
                     !CC help - #List admin features");
                     ```""");
@@ -184,7 +184,7 @@ public class Main extends ListenerAdapter {
 // Basic Help command that list these actions^
             case "help" -> answer(e, """
                     ```yaml
-                    Welcome to CCBot 3.2.0, An Open-Source Server Management Companion!
+                    Welcome to CCBot 3.2.1, An Open-Source Server Management Companion!
                     I offer many helpful options for your convenience.
                                         
                     Do !CC [category]
