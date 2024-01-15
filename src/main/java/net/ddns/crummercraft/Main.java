@@ -15,7 +15,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.util.Arrays;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static java.util.Comparator.comparingInt;
@@ -25,7 +26,7 @@ import static net.ddns.crummercraft.config.Config.*;
 
 public class Main extends ListenerAdapter {
     public static final Logger LOGGER = LoggerFactory.getLogger("CCBot");
-    private final List<Server> servers;
+    private final Map<String, Server> servers = new HashMap<>();
     private final File ipList;
     public String serverList;
 
@@ -33,7 +34,7 @@ public class Main extends ListenerAdapter {
     private Server proxyServer = null;
 
     public Main() {
-        this.servers = ServerConfigReader.listServers(e -> {
+        this.servers.putAll(ServerConfigReader.listServers(e -> {
             if (proxyServer != null) {
                 if (proxyServer.isRunning()) {
                     e.getJDA().getPresence().setStatus(OnlineStatus.ONLINE);
@@ -55,14 +56,14 @@ public class Main extends ListenerAdapter {
             } else {
                 e.getJDA().getPresence().setStatus(OnlineStatus.IDLE);
             }
-        }, e -> e.getJDA().getPresence().setStatus(OnlineStatus.DO_NOT_DISTURB));
+        }, e -> e.getJDA().getPresence().setStatus(OnlineStatus.DO_NOT_DISTURB)));
 
-        mainServer = servers.stream().filter(server -> server.info.isMainServer()).findFirst().orElseThrow(() -> new RuntimeException("No main server found"));
-        proxyServer = servers.stream().filter(server -> server.info.isProxy()).findFirst().orElse(null);
+        mainServer = getAllServers().filter(server -> server.info.isMainServer()).findFirst().orElseThrow(() -> new RuntimeException("No main server found"));
+        proxyServer = getAllServers().filter(server -> server.info.isProxy()).findFirst().orElse(null);
 
         this.ipList = new File(new File(mainServer.info.serverFolder(), "config"), "offline-ip-list.txt");
 
-        this.serverList = servers.stream().sorted(comparingInt(Server::port)).map(Server::toString).collect(joining("\n"));
+        this.serverList = getAllServers().sorted(comparingInt(Server::port)).map(Server::toString).collect(joining("\n"));
     }
 
     public static void main(String[] args) {
@@ -100,8 +101,7 @@ public class Main extends ListenerAdapter {
 
             case "!help" -> answer(e, """ 
                     ```yaml
-                    Welcome to CCBot V3.1.0, How may I assist you?
-                    !ip - #Get the server status and player count
+                    Welcome to CCBot V3.2.1, How may I assist you?
                     !status - #Get status for each server
                     !servers - #Lists all servers
                     !myip - #Find what your current IP is
@@ -111,7 +111,6 @@ public class Main extends ListenerAdapter {
                     !CC help - #List admin features");
                     ```""");
             case "!status" -> status(e);
-            case "!ip" -> answer(e, "```yaml\nServer IPs:\n" + serverList + "```");
             case "!myip" -> answer(e, "You can get your ip using: https://api64.ipify.org/");
             case "!servers" -> answer(e, "```yaml\nServers:\n" + serverList + "```");
             case "!web" -> answer(e, website);
@@ -136,19 +135,28 @@ public class Main extends ListenerAdapter {
 
     private Stream<Server> findServer(MessageReceivedEvent e, String name) {
         if (name == null) {
-            return servers.stream();
+            return getAllServers();
+        } else {
+            return Stream.ofNullable(name)
+                    .map(serverName -> {
+                        Server server = servers.get(serverName);
+                        if (server == null) {
+                            answer(e, "The server named " + serverName + " was not found");
+                        }
+                        return server;
+                    });
         }
-        return Stream.ofNullable(servers.stream().filter(server -> server.name().equals(name)).findFirst().orElseGet(() -> {
-            answer(e, "The server named " + name + " was not found");
-            return null;
-        }));
+    }
+
+    private Stream<Server> getAllServers() {
+        return servers.values().stream();
     }
 
     private void status(MessageReceivedEvent e) {
         answer(e, """
                           ```yaml
                           Servers:
-                          """ + servers.stream().map(Server::status).collect(joining("\n")) + "```");
+                          """ + getAllServers().map(Server::status).collect(joining("\n")) + "```");
     }
 
     private void handleAdmin(MessageReceivedEvent e) throws InterruptedException {

@@ -10,8 +10,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class ServerConfigReader {
@@ -30,37 +31,39 @@ public class ServerConfigReader {
         }
         return servers;
     }
-    private static List<File> listServerFiles() {
+
+    // To whomever sees this monstrosity: I am sorry that this was invented
+    public static Map<String, Server> listServers(
+            Consumer<MessageReceivedEvent> onMainStart,
+            Consumer<MessageReceivedEvent> onMainStop,
+            Consumer<MessageReceivedEvent> onProxyStart,
+            Consumer<MessageReceivedEvent> onProxyStop) {
+        final ObjectReader parser = new ObjectMapper().readerFor(ServerData.class);
         try (Stream<Path> stream = Files.walk(createPathIfMissing())) {
-            return stream.map(Path::toFile).filter(File::isFile).toList();
+            return stream.map(Path::toFile)
+                    .filter(File::isFile)
+                    .map(file -> {
+                        try {
+                            return (ServerData)parser.readValue(file);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    })
+                    .filter(serverData -> serverData != null && serverData.name() != null && checkIfServerExists(serverData))
+                    .collect(Collectors.toMap(ServerData::name, serverInfo -> createServer(serverInfo, onMainStart, onMainStop, onProxyStart, onProxyStop)));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static List<ServerData> listServerInfos() {
-        final ObjectReader parser = new ObjectMapper().readerFor(ServerData.class);
-        return listServerFiles().stream().map(file -> {
-            try {
-                return (ServerData) parser.readValue(file);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }).toList();
-    }
-
-    public static List<Server> listServers(Consumer<MessageReceivedEvent> onMainStart, Consumer<MessageReceivedEvent> onMainStop, Consumer<MessageReceivedEvent> onProxyStart, Consumer<MessageReceivedEvent> onProxyStop) {
-        return listServerInfos().stream()
-                .filter(ServerConfigReader::checkIfServerExists)
-                .map(serverInfo -> {
-                    if (serverInfo.isMainServer()) {
-                        return new Server(serverInfo, onMainStart, onMainStop);
-                    } else if (serverInfo.isProxy()) {
-                        return new Proxy(serverInfo, onProxyStart, onProxyStop);
-                    } else {
-                        return new Server(serverInfo, NOOP, NOOP);
-                    }
-                }).toList();
+    private static Server createServer(ServerData serverInfo, Consumer<MessageReceivedEvent> onMainStart, Consumer<MessageReceivedEvent> onMainStop, Consumer<MessageReceivedEvent> onProxyStart, Consumer<MessageReceivedEvent> onProxyStop) {
+        if (serverInfo.isMainServer()) {
+            return new Server(serverInfo, onMainStart, onMainStop);
+        } else if (serverInfo.isProxy()) {
+            return new Proxy(serverInfo, onProxyStart, onProxyStop);
+        } else {
+            return new Server(serverInfo, NOOP, NOOP);
+        }
     }
 
     private static boolean checkIfServerExists(ServerData data) {
